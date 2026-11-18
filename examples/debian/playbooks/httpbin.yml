@@ -1,0 +1,92 @@
+---
+- name: Install Go Httpbin and configure nginx reverse proxy
+  hosts: all
+  become: true
+  vars:
+    httpbin_archive_url: "https://github.com/mccutchen/go-httpbin/releases/latest/download/go-httpbin-linux-amd64.tar.gz"
+    httpbin_port: 8080
+
+  tasks:
+    - name: Create temporary directory for go-httpbin download
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: go-httpbin-
+      register: httpbin_tmp
+
+    - name: Download and extract go-httpbin release archive
+      ansible.builtin.unarchive:
+        src: "{{ httpbin_archive_url }}"
+        dest: "{{ httpbin_tmp.path }}"
+        remote_src: true
+
+    - name: Install go-httpbin binary to /usr/local/bin
+      ansible.builtin.copy:
+        src: "{{ httpbin_tmp.path }}/go-httpbin"
+        dest: /usr/local/bin/go-httpbin
+        mode: "0755"
+        remote_src: true
+      notify: Restart go-httpbin
+
+    - name: Remove temporary download directory
+      ansible.builtin.file:
+        path: "{{ httpbin_tmp.path }}"
+        state: absent
+
+    - name: Create systemd unit for go-httpbin
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/go-httpbin.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Go Httpbin HTTP Request & Response Service
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/go-httpbin -host 127.0.0.1 -port {{ httpbin_port }}
+          Restart=on-failure
+          DynamicUser=true
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart go-httpbin
+
+    - name: Enable and start go-httpbin service
+      ansible.builtin.systemd:
+        name: go-httpbin
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Configure nginx default site to reverse-proxy / to go-httpbin
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/default
+        mode: "0644"
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+
+              server_name _;
+
+              location / {
+                  proxy_pass http://127.0.0.1:{{ httpbin_port }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+      notify: Reload nginx
+
+  handlers:
+    - name: Restart go-httpbin
+      ansible.builtin.systemd:
+        name: go-httpbin
+        state: restarted
+        daemon_reload: true
+
+    - name: Reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded

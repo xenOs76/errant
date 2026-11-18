@@ -1,0 +1,41 @@
+# /etc/nixos/errant-defaults.nix - Managed by Errant Ansible
+{ config, pkgs, ... }:
+
+{
+  environment.systemPackages = with pkgs; [
+    vim
+    bash-completion
+    ncurses
+    socat
+  ];
+
+  environment.variables = {
+    EDITOR = "vim";
+    VISUAL = "vim";
+  };
+
+  programs.vim = {
+    enable = true;
+    defaultEditor = true;
+  };
+
+  environment.etc."vimrc.local".text = ''
+    syntax on
+    set background=dark
+    set tabstop=2
+    set shiftwidth=2
+    set expandtab
+    set number
+    autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
+  '';
+
+  programs.bash.completion.enable = true;
+
+  environment.extraInit = ''
+    if [ -n "$PS1" ] || [ -t 0 ]; then
+      if [ "$TERM" = "dumb" ] || [ -z "$TERM" ] || ! ${pkgs.ncurses}/bin/infocmp "$TERM" >/dev/null 2>&1; then
+        export TERM=xterm-256color
+      fi
+    fi
+  '';
+}

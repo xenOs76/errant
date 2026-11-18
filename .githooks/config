@@ -1,0 +1,3 @@
+# Managed by agents/scripts/install-git-hooks.sh — do not hand-edit unless you know why.
+# Catalog: /home/xeno/.agents/githooks
+enabled=golangci-lint,shellcheck,nix,markdown,yaml,gitleaks

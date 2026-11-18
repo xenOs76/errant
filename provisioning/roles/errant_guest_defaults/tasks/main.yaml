@@ -1,0 +1,16 @@
+---
+# ==============================================================================
+# Errant Guest Defaults Role - Dispatcher
+# ==============================================================================
+
+- name: Dispatch to Debian/Ubuntu tasks
+  ansible.builtin.include_tasks: debian.yaml
+  when: ansible_os_family == "Debian"
+
+- name: Dispatch to RedHat/Fedora tasks
+  ansible.builtin.include_tasks: redhat.yaml
+  when: ansible_os_family == "RedHat"
+
+- name: Dispatch to NixOS tasks
+  ansible.builtin.include_tasks: nixos.yaml
+  when: ansible_distribution == "NixOS"

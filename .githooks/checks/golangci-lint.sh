@@ -1,0 +1,1 @@
+/home/xeno/.agents/githooks/checks/golangci-lint.sh

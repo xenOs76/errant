@@ -1,0 +1,18 @@
+---
+# ==============================================================================
+# Errant Guest Base Defaults Playbook
+#
+# Applies terminal capabilities, dark-background color defaults, sensible YAML
+# editing configurations for vim, and environment variables across all cluster
+# nodes regardless of distribution (Ubuntu, Debian, Fedora, NixOS).
+#
+# Usage:
+#   ansible-playbook -i .errant/inventory.ini --ssh-common-args="-F .errant/ssh_config" provisioning/defaults.yaml
+# ==============================================================================
+
+- name: Apply Errant Guest Base Environment Defaults
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - role: errant_guest_defaults

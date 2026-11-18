@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=../../schema/errantfile.schema.json
+version: "1"
+project: nixos-deploy-rs
+
+defaults:
+  box: nixos/26.05
+  driver: libvirt
+  memory_mb: 2048
+  cpus: 2
+  root_disk_size: 25G
+  ssh:
+    user: errant
+  synced_folders:
+    - source: .
+      target: /errant
+      type: virtiofs
+
+network:
+  mode: private
+  subnet: 192.168.61.0/24
+  bridge: errbr-61
+  dhcp: true
+
+topologies:
+  dev:
+    description: Standalone NixOS VM simulating remote deployment via deploy-rs
+    nodes:
+      - name: nixos-sim
+        ip: 192.168.61.10

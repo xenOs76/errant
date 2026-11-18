@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../schema/errantfile.schema.json
+version: "1"
+project: fedora
+defaults:
+  image: https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2
+  image_alias: fedora-44
+  driver: libvirt
+  memory_mb: 2048
+  cpus: 2
+  root_disk_size: 25G
+  ssh:
+    user: errant
+  synced_folders:
+    - source: .
+      target: /errant
+      type: virtiofs
+network:
+  mode: private
+  subnet: 192.168.58.0/24
+  bridge: errbr-58
+  dhcp: true
+topologies:
+  dev:
+    description: Single standalone Fedora Cloud 44 development VM
+    nodes:
+      - name: fedora-vm
+        ip: 192.168.58.10

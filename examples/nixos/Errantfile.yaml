@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../../schema/errantfile.schema.json
+version: "1"
+project: nixos
+defaults:
+  box: nixos/26.05
+  driver: libvirt
+  memory_mb: 2048
+  cpus: 2
+  root_disk_size: 25G
+  ssh:
+    user: errant
+  synced_folders:
+    - source: .
+      target: /errant
+      type: virtiofs
+network:
+  mode: private
+  subnet: 192.168.60.0/24
+  bridge: errbr-60
+  dhcp: true
+topologies:
+  dev:
+    description: Single standalone NixOS 26.05 development VM
+    nodes:
+      - name: nixos-vm
+        ip: 192.168.60.10

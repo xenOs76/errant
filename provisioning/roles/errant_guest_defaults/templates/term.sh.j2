@@ -1,0 +1,7 @@
+# /etc/profile.d/term.sh - Managed by Errant Ansible
+# Ensures valid 256-color terminal capabilities for interactive sessions
+if [ -n "$PS1" ] || [ -t 0 ]; then
+  if [ "$TERM" = "dumb" ] || [ -z "$TERM" ] || ! infocmp "$TERM" >/dev/null 2>&1; then
+    export TERM=xterm-256color
+  fi
+fi

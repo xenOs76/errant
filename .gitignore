@@ -1,0 +1,24 @@
+# Binaries
+bin/
+dist/
+/errant
+
+# Errant runtime state & OpenTofu workdirs
+.errant/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# OS & Editor & Environment
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+.direnv/
+.devenv/
+
+# Test coverage
+cover.out
+coverage.html

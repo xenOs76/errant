@@ -1,0 +1,531 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/os76/errant/main/schema/errantfile.schema.json",
+  "title": "Errantfile",
+  "description": "Declarative multi-node virtual machine topology configuration for Errant",
+  "type": "object",
+  "required": ["version", "project", "topologies"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["1", "2"],
+      "description": "Errant configuration schema version"
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Project or cluster name, used for prefixing domains and volumes"
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Global defaults inherited by all nodes and profiles unless overridden",
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "description": "URL or local path to base cloud image (.qcow2 / .img)"
+        },
+        "box": {
+          "type": "string",
+          "description": "Vagrant-style box shorthand (e.g., ubuntu/noble64, debian/bookworm64, nixos/24.11) or image URL"
+        },
+        "image_alias": {
+          "type": "string",
+          "description": "Human-friendly alias for the image (e.g., ubuntu-24.04, debian-13, nixos-24.05)"
+        },
+        "driver": {
+          "type": "string",
+          "enum": ["libvirt", "mock"],
+          "default": "libvirt",
+          "description": "Hypervisor driver to use"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "minimum": 512,
+          "default": 2048,
+          "description": "Default memory allocation in megabytes"
+        },
+        "cpus": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2,
+          "description": "Default virtual CPU count"
+        },
+        "root_disk_size": {
+          "type": "string",
+          "pattern": "^[0-9]+[GMKTP]?$",
+          "default": "20G",
+          "description": "Virtual size of root COW disk (e.g. 25G)"
+        },
+        "ssh": {
+          "$ref": "#/$defs/sshConfig"
+        },
+        "synced_folders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syncedFolder"
+          }
+        },
+        "snapshot_mode": {
+          "type": "string",
+          "enum": ["disk", "live"],
+          "default": "disk",
+          "description": "Snapshot mode for lifecycle steps: 'disk' (shutdown/offline consistent) or 'live' (online)"
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "description": "Private network and bridge configuration",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["private", "nat", "bridge", "direct"],
+          "default": "private"
+        },
+        "subnet": {
+          "type": "string",
+          "description": "IPv4 subnet in CIDR notation (e.g. 192.168.56.0/24)"
+        },
+        "bridge": {
+          "type": "string",
+          "description": "Linux bridge interface name (e.g. virbr56)"
+        },
+        "dhcp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether libvirt manages DHCP with static reservations on this network"
+        },
+        "gateway": {
+          "type": "string",
+          "format": "ipv4",
+          "description": "Optional default gateway override"
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "description": "Declarative base image build definitions",
+      "additionalProperties": {
+        "$ref": "#/$defs/imageBuildConfig"
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "description": "Reusable node classes/profiles (e.g. control-plane, worker, storage-node) to eliminate redundancy",
+      "additionalProperties": {
+        "$ref": "#/$defs/nodeProfile"
+      }
+    },
+    "topologies": {
+      "type": "object",
+      "description": "Named topology profiles (e.g. standard, ha, minimal)",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/topology"
+      }
+    },
+    "global_provision": {
+      "type": "array",
+      "description": "Provisioning actions applied to all nodes across all topologies",
+      "items": {
+        "$ref": "#/$defs/provisionItem"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered lifecycle steps executed after 'errant up' (step 0) and frozen into VM snapshots",
+      "items": {
+        "$ref": "#/$defs/stepItem"
+      }
+    }
+  },
+  "$defs": {
+    "sshConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "user": {
+          "type": "string",
+          "default": "errant",
+          "description": "Default SSH username configured in guest"
+        },
+        "public_key": {
+          "type": "string",
+          "description": "Path to host public key to inject into authorized_keys (defaults to ~/.ssh/id_ed25519.pub)"
+        },
+        "private_key": {
+          "type": "string",
+          "description": "Path to host private key for SSH connections (defaults to matching private key)"
+        },
+        "port": {
+          "type": "integer",
+          "default": 22,
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "syncedFolder": {
+      "type": "object",
+      "required": ["source", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Host directory path (relative to Errantfile or absolute)"
+        },
+        "target": {
+          "type": "string",
+          "description": "Mount point path inside guest"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["virtiofs", "9p", "rsync"],
+          "default": "virtiofs"
+        },
+        "readonly": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "secondaryDisk": {
+      "type": "object",
+      "required": ["device", "size"],
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "type": "string",
+          "pattern": "^vd[b-z]$",
+          "description": "Target guest block device (e.g. vdb, vdc)"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+[GMKTP]?$",
+          "description": "Disk size (e.g. 20G)"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["qcow2", "raw"],
+          "default": "qcow2"
+        },
+        "pool": {
+          "type": "string",
+          "default": "default",
+          "description": "Libvirt storage pool name"
+        },
+        "condition": {
+          "type": "string",
+          "description": "Optional expression evaluated during node expansion (e.g. '${index} == 1')"
+        }
+      }
+    },
+    "provisionItem": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["shell", "file", "ansible"]
+        },
+        "inline": {
+          "type": "string",
+          "description": "Inline shell command/script content"
+        },
+        "script": {
+          "type": "string",
+          "description": "Host path to shell script file"
+        },
+        "source": {
+          "type": "string",
+          "description": "Host file source path (for 'file' provisioner)"
+        },
+        "target": {
+          "type": "string",
+          "description": "Guest destination path (for 'file' provisioner)"
+        },
+        "mode": {
+          "type": "string",
+          "pattern": "^0?[0-7]{3,4}$",
+          "description": "File permissions mode (e.g. '0755')"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables passed into provision execution"
+        },
+        "playbook": {
+          "type": "string",
+          "description": "Host path to Ansible playbook file (for 'ansible' provisioner)"
+        },
+        "inventory": {
+          "type": "string",
+          "description": "Optional host path to custom Ansible inventory (defaults to .errant/inventory.ini)"
+        },
+        "extra_vars": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra variables passed to ansible-playbook via --extra-vars"
+        },
+        "when": {
+          "type": "string",
+          "enum": ["once", "always"],
+          "default": "once",
+          "description": "Whether to run once on first creation or always on errant up"
+        }
+      }
+    },
+    "nodeProfile": {
+      "type": "object",
+      "description": "Generic node definition/class defining default sizing, disks, and provisioning for a class of machines",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "Ansible role/group tag (e.g. control-plane, worker)"
+        },
+        "image": {
+          "type": "string",
+          "description": "Base image override for this profile"
+        },
+        "box": {
+          "type": "string",
+          "description": "Vagrant-style box shorthand override for this profile"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "minimum": 512
+        },
+        "cpus": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "root_disk_size": {
+          "type": "string",
+          "pattern": "^[0-9]+[GMKTP]?$"
+        },
+        "disks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/secondaryDisk"
+          }
+        },
+        "synced_folders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syncedFolder"
+          }
+        },
+        "provision": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provisionItem"
+          }
+        }
+      }
+    },
+    "nodeSpec": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Node hostname or name pattern with '${index}'"
+        },
+        "profile": {
+          "type": "string",
+          "description": "Reference to a named node profile/class in 'profiles:'"
+        },
+        "role": {
+          "type": "string",
+          "description": "Role tag (overrides profile role)"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Number of instances to spawn for templated nodes"
+        },
+        "ip": {
+          "type": "string",
+          "format": "ipv4",
+          "description": "Static IP address for a single node"
+        },
+        "ip_start": {
+          "type": "string",
+          "format": "ipv4",
+          "description": "Starting static IP address for indexed nodes"
+        },
+        "image": {
+          "type": "string",
+          "description": "Override default image for this node"
+        },
+        "box": {
+          "type": "string",
+          "description": "Override default box shorthand for this node"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "minimum": 512,
+          "description": "Local override for profile memory_mb"
+        },
+        "cpus": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Local override for profile cpus"
+        },
+        "root_disk_size": {
+          "type": "string",
+          "pattern": "^[0-9]+[GMKTP]?$",
+          "description": "Local override for profile root_disk_size"
+        },
+        "disks": {
+          "type": "array",
+          "description": "Local override or extension of profile disks",
+          "items": {
+            "$ref": "#/$defs/secondaryDisk"
+          }
+        },
+        "synced_folders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syncedFolder"
+          }
+        },
+        "provision": {
+          "type": "array",
+          "description": "Additional node-specific provisioning actions (executed after profile provisioners)",
+          "items": {
+            "$ref": "#/$defs/provisionItem"
+          }
+        }
+      }
+    },
+    "topology": {
+      "type": "object",
+      "required": ["nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nodeSpec"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "description": "Topology-specific lifecycle steps (overrides root steps when set)",
+          "items": {
+            "$ref": "#/$defs/stepItem"
+          }
+        }
+      }
+    },
+    "stepItem": {
+      "type": "object",
+      "required": ["name", "provision"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Unique step identifier (cannot be '0' or 'base')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this step does"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional list of node names to target (defaults to all nodes in active topology)"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional list of node roles to target"
+        },
+        "provision": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/provisionItem"
+          },
+          "description": "Provisioning actions executed during this step before taking the snapshot"
+        }
+      }
+    },
+    "imageBuildConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "builder": {
+          "type": "string",
+          "enum": ["nixos-generators", "nix"],
+          "default": "nixos-generators",
+          "description": "Image builder engine"
+        },
+        "channel": {
+          "type": "string",
+          "description": "Nixpkgs channel version (e.g. nixos-26.05)"
+        },
+        "flake": {
+          "type": "string",
+          "description": "Nix flake reference (e.g. nixpkgs#nixos-26.05)"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["qcow", "openstack", "raw-efi", "iso"],
+          "default": "qcow",
+          "description": "Target image format"
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Nix packages to include in environment.systemPackages"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Paths to external NixOS module files to import"
+        },
+        "inline": {
+          "type": "string",
+          "description": "Inline Nix configuration snippet merged into image configuration"
+        },
+        "source": {
+          "type": "string",
+          "description": "Path to base NixOS configuration file"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables passed into builder invocation"
+        }
+      }
+    }
+  }
+}

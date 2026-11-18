@@ -1,0 +1,51 @@
+---
+# ==============================================================================
+# RedHat / Fedora Environment & Terminal Defaults
+# ==============================================================================
+
+- name: Install base terminal and editing packages (RedHat/Fedora)
+  ansible.builtin.dnf:
+    name:
+      - vim-enhanced
+      - bash-completion
+      - ncurses
+      - socat
+    state: present
+
+- name: Configure 256-color terminal fallback in /etc/profile.d/term.sh
+  ansible.builtin.template:
+    src: term.sh.j2
+    dest: /etc/profile.d/term.sh
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure system-wide editor environment in /etc/profile.d/editor.sh
+  ansible.builtin.template:
+    src: editor.sh.j2
+    dest: /etc/profile.d/editor.sh
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Persist EDITOR in /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    regexp: '^EDITOR='
+    line: 'EDITOR=vim'
+    state: present
+
+- name: Persist VISUAL in /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    regexp: '^VISUAL='
+    line: 'VISUAL=vim'
+    state: present
+
+- name: Configure global vim defaults in /etc/vimrc.local
+  ansible.builtin.template:
+    src: vimrc.local.j2
+    dest: /etc/vimrc.local
+    owner: root
+    group: root
+    mode: "0644"

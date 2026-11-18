@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Script: help.sh
+# Purpose: Display formatted quick-reference cheatsheet and operational workflows
+#          for managing the CKA training Vagrant + Libvirt Kubernetes cluster.
+#
+# Context:
+#   Executed on the HOST machine. Designed as an interactive terminal cheatsheet
+#   summarizing environment loading, VM lifecycle, manual CKA setup steps,
+#   SSH commands, and credentials synchronization.
+#
+# Usage:
+#   ./scripts/help.sh
+#   # Or via Makefile default target:
+#   make help
+# ==============================================================================
+set -euo pipefail
+
+# ANSI color codes
+BOLD=$(printf '\033[1m')
+CYAN=$(printf '\033[0;36m')
+GREEN=$(printf '\033[0;32m')
+YELLOW=$(printf '\033[0;33m')
+RESET=$(printf '\033[0m')
+
+cat <<EOF
+${BOLD}========================================================================${RESET}
+${BOLD}${CYAN}   CKA Training Lab - Cluster Operations & Vagrant Cheatsheet           ${RESET}
+${BOLD}========================================================================${RESET}
+
+${BOLD}${YELLOW}[1] Environment & Shell${RESET}
+  Enter nix-shell environment:
+    ${GREEN}./scripts/shell.sh${RESET}
+    ${GREEN}nix-shell${RESET}
+
+${BOLD}${YELLOW}[2] Cluster Lifecycle${RESET}
+  Start all VMs:
+    ${GREEN}make preprod-up${RESET}  or  ${GREEN}./scripts/shell.sh --run "vagrant up"${RESET}
+  Check VM status:
+    ${GREEN}make preprod-status${RESET}  or  ${GREEN}./scripts/shell.sh --run "vagrant status"${RESET}
+  Stop all VMs (graceful halt):
+    ${GREEN}./scripts/shell.sh --run "vagrant halt"${RESET}
+  Destroy and clean up all VMs:
+    ${GREEN}make preprod-destroy${RESET}  or  ${GREEN}./scripts/shell.sh --run "vagrant destroy -f"${RESET}
+  Sync preprod cluster credentials:
+    ${GREEN}make preprod-sync-kubeconfig${RESET}  (context: ${CYAN}k8s-homelab-preprod${RESET})
+  Sync prod cluster credentials:
+    ${GREEN}make prod-sync-kubeconfig${RESET}     (context: ${CYAN}k8s-homelab${RESET})
+
+${BOLD}${YELLOW}[3] Provisioning Existing VMs (No Re-creation)${RESET}
+  Re-run provisioners on all running VMs:
+    ${GREEN}./scripts/shell.sh --run "vagrant provision"${RESET}
+  Re-run provisioners on a specific VM:
+    ${GREEN}./scripts/shell.sh --run "vagrant provision kube-control-plane"${RESET}
+    ${GREEN}./scripts/shell.sh --run "vagrant provision kube-worker-1"${RESET}
+    ${GREEN}./scripts/shell.sh --run "vagrant provision kube-worker-2"${RESET}
+  Start stopped VMs AND execute provisioners:
+    ${GREEN}./scripts/shell.sh --run "vagrant up --provision"${RESET}
+
+${BOLD}${YELLOW}[4] SSH Access${RESET}
+  Connect to control plane:
+    ${GREEN}./scripts/shell.sh --run "vagrant ssh kube-control-plane"${RESET}
+  Connect to worker node:
+    ${GREEN}./scripts/shell.sh --run "vagrant ssh kube-worker-1"${RESET}
+    ${GREEN}./scripts/shell.sh --run "vagrant ssh kube-worker-2"${RESET}
+
+${BOLD}${YELLOW}[5] Kubernetes Setup Steps (Inside VMs)${RESET}
+  1. On ${BOLD}kube-control-plane${RESET}:
+     Initialize control plane:
+       ${GREEN}sudo /vagrant/scripts/control-plane.sh 172.18.0.0/16 192.168.56.10${RESET}
+     Install Cilium CNI (Option A):
+       ${GREEN}./cni-install-cilium.sh${RESET}
+     Install Calico CNI (Option B):
+       ${GREEN}./cni-install-calico.sh${RESET}
+     Install Metrics Server (via Helm):
+       ${GREEN}./cka/helm/install-kube-metrics.sh${RESET}
+     Install Prometheus Operator (via Helm):
+       ${GREEN}./cka/helm/install-kube-prometheus.sh${RESET}
+
+
+  2. On ${BOLD}kube-worker-1${RESET} / ${BOLD}kube-worker-2${RESET}:
+     Join cluster:
+       ${GREEN}sudo /vagrant/scripts/worker.sh 1${RESET}  # (use index '2' on kube-worker-2)
+
+${BOLD}========================================================================${RESET}
+EOF

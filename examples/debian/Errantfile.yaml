@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=../../schema/errantfile.schema.json
+version: "1"
+project: debian
+defaults:
+  image: https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-genericcloud-amd64-daily.qcow2
+  image_alias: debian-13
+  driver: libvirt
+  memory_mb: 2048
+  cpus: 2
+  root_disk_size: 25G
+  ssh:
+    user: errant
+  synced_folders:
+    - source: .
+      target: /errant
+      type: virtiofs
+network:
+  mode: private
+  subnet: 192.168.57.0/24
+  bridge: errbr-57
+  dhcp: true
+topologies:
+  dev:
+    description: Single standalone Debian 13 development VM
+    nodes:
+      - name: debian-vm
+        ip: 192.168.57.10
+steps:
+  - name: webserver
+    description: Install nginx with the default welcome page
+    provision:
+      - type: shell
+        inline: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y nginx
+          systemctl enable --now nginx
+  - name: app
+    description: Serve a sample HTML page
+    provision:
+      - type: shell
+        inline: |
+          cat <<'EOF' > /var/www/html/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>Errant Sample App</title>
+          </head>
+          <body>
+            <h1>Hello from Errant Step 2!</h1>
+            <p>Served by nginx on Debian 13.</p>
+          </body>
+          </html>
+          EOF
+  - name: httpbin
+    description: Install Go Httpbin via Ansible and expose it via nginx reverse proxy
+    provision:
+      - type: ansible
+        playbook: playbooks/httpbin.yml

@@ -1,0 +1,34 @@
+---
+# Markdownlint for authored markdown (README, docs, AGENTS).
+# Rule set aligned with agents / llm-wiki standard.
+globs:
+  - "**/*.md"
+
+ignores:
+  - ".errant/**"
+  - "**/.errant/**"
+  - "**/.terraform/**"
+  - "dist/**"
+  - ".devenv/**"
+  - "**/.direnv/**"
+  - ".direnv/**"
+
+config:
+  MD004: false
+  MD010:
+    code_blocks: false
+  MD012: false
+  MD013: false
+  MD022: false
+  MD024: false
+  MD025: false
+  MD026: false
+  MD031: false
+  MD032: false
+  MD033: false
+  MD034: false
+  MD036: false
+  MD040: false
+  MD041: false
+  MD046: false
+  MD060: false

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../schema/errantfile.schema.json
+version: "1"
+project: ubuntu
+defaults:
+  image: https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img
+  image_alias: ubuntu-26.04
+  driver: libvirt
+  memory_mb: 2048
+  cpus: 2
+  root_disk_size: 25G
+  ssh:
+    user: errant
+  synced_folders:
+    - source: .
+      target: /errant
+      type: virtiofs
+network:
+  mode: private
+  subnet: 192.168.59.0/24
+  bridge: errbr-59
+  dhcp: true
+topologies:
+  dev:
+    description: Single standalone Ubuntu 26.04 LTS development VM
+    nodes:
+      - name: ubuntu-vm
+        ip: 192.168.59.10

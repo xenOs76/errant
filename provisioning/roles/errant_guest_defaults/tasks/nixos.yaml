@@ -1,0 +1,25 @@
+---
+# ==============================================================================
+# NixOS Environment & Terminal Defaults
+# ==============================================================================
+
+- name: Deploy Errant defaults NixOS module
+  ansible.builtin.template:
+    src: errant-defaults.nix.j2
+    dest: /etc/nixos/errant-defaults.nix
+    owner: root
+    group: root
+    mode: "0644"
+  register: nixos_defaults_module
+
+- name: Ensure errant-defaults.nix is imported in configuration.nix
+  ansible.builtin.lineinfile:
+    path: /etc/nixos/configuration.nix
+    insertafter: 'imports\s*=\s*\['
+    line: '    ./errant-defaults.nix'
+  register: nixos_config_import
+
+- name: Rebuild and switch NixOS configuration
+  ansible.builtin.command:
+    cmd: nixos-rebuild switch
+  when: nixos_defaults_module.changed or nixos_config_import.changed
