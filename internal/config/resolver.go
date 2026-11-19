@@ -5,10 +5,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// ResolveStoragePoolFunc resolves a configured storage pool name (including "auto").
+var ResolveStoragePoolFunc = detectStoragePool
 
 // ResolveCluster resolves defaults, profiles, templated nodes, and overrides for the selected topology.
 func (c *Config) ResolveCluster(topologyName string) (*ResolvedCluster, error) {
@@ -49,16 +54,39 @@ func (c *Config) ResolveCluster(topologyName string) (*ResolvedCluster, error) {
 		snapshotMode = "disk"
 	}
 
+	shutdownTimeout, err := resolveShutdownTimeout(c.Defaults.ShutdownTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ResolvedCluster{
 		Project:         c.Project,
 		Topology:        selectedTopology,
 		SnapshotMode:    snapshotMode,
+		ShutdownTimeout: shutdownTimeout,
 		Network:         resolvedNet,
 		Images:          c.Images,
 		Nodes:           resolvedNodes,
 		GlobalProvision: c.GlobalProvision,
 		Steps:           resolvedSteps,
 	}, nil
+}
+
+func resolveShutdownTimeout(raw string) (time.Duration, error) {
+	if raw == "" {
+		return 180 * time.Second, nil
+	}
+
+	parsed, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("parsing defaults.shutdown_timeout %q: %w", raw, err)
+	}
+
+	if parsed <= 0 {
+		return 0, fmt.Errorf("defaults.shutdown_timeout must be positive, got %q", raw)
+	}
+
+	return parsed, nil
 }
 
 func (c *Config) selectTopology(name string) (string, error) {
@@ -154,13 +182,14 @@ func (c *Config) resolveSingleNode(nodeDecl NodeConfig, index int, defaultSSH SS
 	role := c.resolveRole(profile, nodeDecl)
 	image := c.resolveImage(profile, nodeDecl)
 	memoryMB, cpus, rootDisk := c.resolveSizing(profile, nodeDecl)
+	storagePool := c.resolveStoragePool(profile, nodeDecl)
 
 	ip, err := c.resolveIP(nodeDecl, index)
 	if err != nil {
 		return ResolvedNode{}, err
 	}
 
-	disks := c.resolveDisks(profile, nodeDecl, index)
+	disks := c.resolveDisks(profile, nodeDecl, index, storagePool)
 
 	var syncedFolders []SyncedFolderConfig
 
@@ -181,6 +210,7 @@ func (c *Config) resolveSingleNode(nodeDecl NodeConfig, index int, defaultSSH SS
 		MemoryMB:      memoryMB,
 		CPUs:          cpus,
 		RootDiskSize:  rootDisk,
+		StoragePool:   storagePool,
 		SSH:           defaultSSH,
 		Disks:         disks,
 		SyncedFolders: syncedFolders,
@@ -281,8 +311,45 @@ func (*Config) resolveIP(nodeDecl NodeConfig, index int) (string, error) {
 	return "", nil
 }
 
-func (*Config) resolveDisks(profile ProfileConfig, nodeDecl NodeConfig, index int) []DiskConfig {
+func (c *Config) resolveStoragePool(profile ProfileConfig, nodeDecl NodeConfig) string {
+	pool := "default"
+	if c.Defaults.StoragePool != "" {
+		pool = c.Defaults.StoragePool
+	}
+
+	if profile.StoragePool != "" {
+		pool = profile.StoragePool
+	}
+
+	if nodeDecl.StoragePool != "" {
+		pool = nodeDecl.StoragePool
+	}
+
+	return ResolveStoragePoolFunc(pool)
+}
+
+func detectStoragePool(pool string) string {
+	if pool == "" {
+		return "default"
+	}
+
+	if pool != "auto" {
+		return pool
+	}
+
+	if err := exec.Command("virsh", "-c", "qemu:///system", "pool-info", "vmstore").Run(); err == nil {
+		return "vmstore"
+	}
+
+	return "default"
+}
+
+func (*Config) resolveDisks(profile ProfileConfig, nodeDecl NodeConfig, index int, defaultPool string) []DiskConfig {
 	var disks []DiskConfig
+
+	if defaultPool == "" {
+		defaultPool = "default"
+	}
 
 	candidateDisks := append([]DiskConfig{}, profile.Disks...)
 	if len(nodeDecl.Disks) > 0 {
@@ -299,7 +366,7 @@ func (*Config) resolveDisks(profile ProfileConfig, nodeDecl NodeConfig, index in
 		}
 
 		if d.Pool == "" {
-			d.Pool = "default"
+			d.Pool = defaultPool
 		}
 
 		disks = append(disks, d)

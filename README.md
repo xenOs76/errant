@@ -5,7 +5,7 @@
 [![Go Version](https://img.shields.io/badge/go-1.22%2B-blue.svg)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Errant is a lightweight, declarative local virtual machine orchestrator designed as as an alternative to HashiCorp Vagrant. It eliminates Ruby runtime fragility, Gem deprecation issues, and slow CLI text-scraping by pairing a clean, profile-driven YAML configuration (`Errantfile.yaml`) with **Pulumi Automation API**, **Libvirt/KVM**, and **Cloud-Init**.
+Errant is a lightweight, declarative local virtual machine orchestrator designed as an alternative to HashiCorp Vagrant. It eliminates Ruby runtime fragility, Gem deprecation issues, and slow CLI text-scraping by pairing a clean, profile-driven YAML configuration (`Errantfile.yaml`) with **Pulumi Automation API**, **Libvirt/KVM**, and **Cloud-Init**.
 
 ---
 
@@ -20,7 +20,7 @@ Errant is a lightweight, declarative local virtual machine orchestrator designed
 * **Native Cloud-Init**: Declarative guest user initialization, SSH key injection, and hostname configuration via NoCloud ISOs.
 * **Modern File Sharing**: Native Linux `virtiofs` replacing brittle 9p mounts and root-requiring host NFS exports.
 * **Ansible & SSH Integration**: Automatically emits dynamic OpenSSH config (`.errant/ssh_config`) and Ansible inventories (`.errant/inventory.ini`).
-* **Lifecycle Steps & Snapshots**: Optional declarative `steps:` and ad-hoc `errant step save` checkpoints backed by Libvirt/QCOW2 snapshots for instant rollback and iteration.
+* **Lifecycle Steps & Snapshots**: Optional declarative `steps:` and ad-hoc `errant steps save` checkpoints backed by Libvirt/QCOW2 snapshots for instant rollback and iteration.
 
 ---
 
@@ -128,11 +128,11 @@ errant up --step 1         # Boot and advance only through step 1
 errant up --no-steps       # Boot without running lifecycle steps or snapshots
 
 # Manage lifecycle steps and VM snapshots
-errant step list
-errant step apply          # Advance remaining steps
-errant step save debug1 -m "Before testing config change"
-errant step revert 1       # Revert VMs to step 1 snapshot
-errant step revert user:debug1
+errant steps list
+errant steps apply          # Advance remaining steps
+errant steps save debug1 -m "Before testing config change"
+errant steps revert 1       # Revert VMs to step 1 snapshot
+errant steps revert user:debug1
 
 # Check cluster state
 errant status

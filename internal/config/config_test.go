@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -600,6 +601,7 @@ project: steps-test
 defaults:
   image: debian/trixie64
   snapshot_mode: live
+  shutdown_timeout: "3m"
 topologies:
   dev:
     nodes:
@@ -639,6 +641,10 @@ steps:
 
 	if resolved.SnapshotMode != "live" {
 		t.Errorf("expected snapshot_mode 'live', got %q", resolved.SnapshotMode)
+	}
+
+	if resolved.ShutdownTimeout != 3*time.Minute {
+		t.Errorf("expected shutdown_timeout 3m, got %v", resolved.ShutdownTimeout)
 	}
 
 	if len(resolved.Steps) != 2 {
@@ -709,5 +715,95 @@ func TestStepsValidationErrors(t *testing.T) {
 				t.Fatalf("expected error for case %s, got nil", tc.name)
 			}
 		})
+	}
+}
+
+func TestStoragePoolResolution(t *testing.T) {
+	origDetect := ResolveStoragePoolFunc
+	ResolveStoragePoolFunc = func(pool string) string {
+		if pool == "auto" {
+			return "vmstore"
+		}
+
+		return pool
+	}
+
+	t.Cleanup(func() { ResolveStoragePoolFunc = origDetect })
+
+	cfg := &Config{
+		Version: "1",
+		Project: "pool-test",
+		Defaults: DefaultsConfig{
+			Image:       "debian/trixie64",
+			StoragePool: "auto",
+		},
+		Profiles: map[string]ProfileConfig{
+			"cp": {
+				Role: "control-plane",
+				Disks: []DiskConfig{
+					{Device: "vdb", Size: "20G"},
+				},
+			},
+			"worker": {
+				Role:        "worker",
+				StoragePool: "fast-nvme",
+			},
+		},
+		Topologies: map[string]TopologyConfig{
+			"dev": {
+				Nodes: []NodeConfig{
+					{Name: "cp-1", Profile: "cp", IP: "192.168.56.10"},
+					{Name: "w-1", Profile: "worker", IP: "192.168.56.21"},
+					{Name: "w-2", Profile: "worker", StoragePool: "default", IP: "192.168.56.22"},
+				},
+			},
+		},
+	}
+
+	cluster, err := cfg.ResolveCluster("dev")
+	if err != nil {
+		t.Fatalf("ResolveCluster failed: %v", err)
+	}
+
+	if cluster.Nodes[0].StoragePool != "vmstore" {
+		t.Errorf("expected cp-1 pool 'vmstore', got %q", cluster.Nodes[0].StoragePool)
+	}
+
+	if cluster.Nodes[0].Disks[0].Pool != "vmstore" {
+		t.Errorf("expected cp-1 secondary disk pool 'vmstore', got %q", cluster.Nodes[0].Disks[0].Pool)
+	}
+
+	if cluster.Nodes[1].StoragePool != "fast-nvme" {
+		t.Errorf("expected w-1 pool 'fast-nvme', got %q", cluster.Nodes[1].StoragePool)
+	}
+
+	if cluster.Nodes[2].StoragePool != "default" {
+		t.Errorf("expected w-2 pool 'default', got %q", cluster.Nodes[2].StoragePool)
+	}
+}
+
+func TestLocalProvisionerSchemaValidation(t *testing.T) {
+	yamlData := []byte(`
+version: "1"
+project: local-prov-test
+defaults:
+  box: ubuntu/noble64
+topologies:
+  dev:
+    nodes:
+      - name: node-1
+        ip: 192.168.56.10
+steps:
+  - name: setup
+    provision:
+      - type: local
+        dir: ../other-repo
+        inline: ./scripts/run-playbook.sh -e preprod -p nfs.yml
+        env:
+          FOO: bar
+`)
+
+	if err := ValidateYAML(yamlData); err != nil {
+		t.Fatalf("expected schema validation to pass for type: local, got: %v", err)
 	}
 }

@@ -2,9 +2,11 @@ package provisioner
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -232,5 +234,155 @@ func TestRunAnsibleProvisioner(t *testing.T) {
 
 	if err := RunAnsibleProvisioner(ctx, "/fake/ssh_config", "node-1", prov, tmpDir); err == nil {
 		t.Fatal("expected error when ansible-playbook fails, got nil")
+	}
+}
+
+func TestProvisionStepClusterScopeAnsible(t *testing.T) {
+	tmpDir := t.TempDir()
+	pbPath := filepath.Join(tmpDir, "site.yml")
+
+	if err := os.WriteFile(pbPath, []byte("- hosts: all\n"), 0o600); err != nil {
+		t.Fatalf("writing playbook: %v", err)
+	}
+
+	var calls [][]string
+
+	origSSH := execSSHCommand
+	execSSHCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "true")
+	}
+
+	t.Cleanup(func() { execSSHCommand = origSSH })
+
+	origAnsible := execAnsibleCommand
+	execAnsibleCommand = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		calls = append(calls, args)
+
+		return exec.CommandContext(ctx, "true")
+	}
+
+	t.Cleanup(func() { execAnsibleCommand = origAnsible })
+
+	cluster := &config.ResolvedCluster{
+		Project:    "k8s-homelab",
+		ProjectDir: tmpDir,
+		Nodes: []config.ResolvedNode{
+			{Name: "cp-1", Role: "control-plane"},
+			{Name: "w-1", Role: "worker"},
+		},
+	}
+
+	step := config.ResolvedStep{
+		Index: 1,
+		Name:  "preprod-deploy",
+		Provision: []config.ProvisionConfig{
+			{Type: "ansible", Scope: "cluster", Playbook: "site.yml"},
+		},
+	}
+
+	if err := ProvisionStep(context.Background(), cluster, "/fake/ssh_config", step); err != nil {
+		t.Fatalf("ProvisionStep failed: %v", err)
+	}
+
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 cluster-wide ansible-playbook call, got %d (%v)", len(calls), calls)
+	}
+
+	for _, arg := range calls[0] {
+		if arg == "--limit" {
+			t.Errorf("did not expect --limit in cluster-scoped ansible call: %v", calls[0])
+		}
+	}
+}
+
+func TestRunLocalProvisioner(t *testing.T) {
+	projectDir := t.TempDir()
+	subDir := filepath.Join(projectDir, "external-repo")
+
+	if err := os.MkdirAll(subDir, 0o750); err != nil {
+		t.Fatalf("failed to create subdir: %v", err)
+	}
+
+	outFile := filepath.Join(projectDir, "out.txt")
+	cmd := fmt.Sprintf(
+		"pwd > %q && echo \"$MY_VAR\" >> %q && echo \"$ERRANT_PROJECT_DIR\" >> %q",
+		outFile, outFile, outFile,
+	)
+	prov := config.ProvisionConfig{
+		Type:   "local",
+		Dir:    "external-repo",
+		Inline: cmd,
+		Env:    map[string]string{"MY_VAR": "hello-local"},
+	}
+
+	if err := RunLocalProvisioner(context.Background(), "/fake/ssh_config", "", prov, projectDir); err != nil {
+		t.Fatalf("RunLocalProvisioner failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 3 || lines[0] != subDir || lines[1] != "hello-local" || lines[2] != projectDir {
+		t.Fatalf("unexpected local provisioner output: %q", string(data))
+	}
+
+	emptyProv := config.ProvisionConfig{Type: "local"}
+	if err := RunLocalProvisioner(context.Background(), "", "", emptyProv, projectDir); err == nil {
+		t.Error("expected error when neither inline nor script is set")
+	}
+
+	badDir := config.ProvisionConfig{Type: "local", Dir: "does-not-exist", Inline: "true"}
+	if err := RunLocalProvisioner(context.Background(), "", "", badDir, projectDir); err == nil {
+		t.Error("expected error when dir does not exist")
+	}
+}
+
+func TestProvisionStepLocalRunsOnce(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origSSH := execSSHCommand
+	execSSHCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "true")
+	}
+
+	t.Cleanup(func() { execSSHCommand = origSSH })
+
+	var calls int
+
+	origLocal := execLocalCommand
+	execLocalCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		calls++
+
+		return exec.CommandContext(ctx, "true")
+	}
+
+	t.Cleanup(func() { execLocalCommand = origLocal })
+
+	cluster := &config.ResolvedCluster{
+		Project:    "k8s-homelab",
+		ProjectDir: tmpDir,
+		Nodes: []config.ResolvedNode{
+			{Name: "cp-1", Role: "control-plane"},
+			{Name: "w-1", Role: "worker"},
+		},
+	}
+
+	step := config.ResolvedStep{
+		Index: 1,
+		Name:  "preprod-up",
+		Provision: []config.ProvisionConfig{
+			{Type: "local", Inline: "echo ok"},
+		},
+	}
+
+	if err := ProvisionStep(context.Background(), cluster, "/fake/ssh_config", step); err != nil {
+		t.Fatalf("ProvisionStep failed: %v", err)
+	}
+
+	if calls != 1 {
+		t.Fatalf("expected 1 local provisioner call for step, got %d", calls)
 	}
 }

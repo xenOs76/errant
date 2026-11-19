@@ -66,7 +66,7 @@ and Cloud-Init for fast, reproducible multi-node topologies.`,
 	rootCmd.AddCommand(newInventoryCmd())
 	rootCmd.AddCommand(newValidateCmd())
 	rootCmd.AddCommand(newImageCmd())
-	rootCmd.AddCommand(newStepCmd())
+	rootCmd.AddCommand(newStepsCmd())
 
 	return rootCmd
 }

@@ -11,16 +11,17 @@ import (
 )
 
 const (
-	virshURI        = "qemu:///system"
-	shutdownTimeout = 60 * time.Second
+	virshURI               = "qemu:///system"
+	defaultShutdownTimeout = 180 * time.Second
 )
 
 var execCommand = exec.CommandContext
 
 // LibvirtManager manages VM snapshots via virsh without coupling to Pulumi.
 type LibvirtManager struct {
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdout          io.Writer
+	Stderr          io.Writer
+	ShutdownTimeout time.Duration
 }
 
 // NewLibvirtManager creates a Libvirt snapshot manager writing command output to stdout/stderr.
@@ -184,7 +185,12 @@ func (m *LibvirtManager) shutdownAndWait(ctx context.Context, domainName string)
 		return fmt.Errorf("virsh shutdown %s: %s: %w", domainName, strings.TrimSpace(string(out)), err)
 	}
 
-	waitCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	timeout := m.ShutdownTimeout
+	if timeout <= 0 {
+		timeout = defaultShutdownTimeout
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(1 * time.Second)

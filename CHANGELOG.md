@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-19
+
+### Added
+
+- **Local Provisioner (`type: local`)**: Host-side command and script execution with `dir:` working directory resolution and exported `ERRANT_PROJECT_DIR`, `ERRANT_INVENTORY`, `ERRANT_SSH_CONFIG`, and `ERRANT_NODE` environment variables.
+- **Storage Pool & Cluster-Scoped Ansible**: Added `storage_pool` configuration (`defaults`, `profiles`, `nodes`, including `auto` detection for `vmstore`) and `scope: cluster` for `ansible` provisioners.
+- **Configurable Shutdown Timeout**: Added `defaults.shutdown_timeout` (default `180s`) for graceful ACPI shutdown before disk-mode VM snapshots.
+- **`k8s-homelab` Example Parity**: Updated `examples/k8s-homelab/Errantfile.yaml` with `vmstore` storage pool, `shutdown_timeout: "5m"`, and `preprod-up`, `preprod-deploy`, `preprod-cks-lab`, `preprod-cks-trivy-operator`, and HA lifecycle steps.
+
+### Changed
+
+- **CLI Subcommand Rename**: Renamed `errant step` to `errant steps` (`list|apply|save|revert|delete`).
+
 ## [0.1.1] - 2026-11-18
 
 ### Added

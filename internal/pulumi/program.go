@@ -66,6 +66,14 @@ func createNetwork(ctx *pulumi.Context, cluster *config.ResolvedCluster) (*libvi
 	return network, nil
 }
 
+func nodePool(node config.ResolvedNode) string {
+	if node.StoragePool != "" {
+		return node.StoragePool
+	}
+
+	return "default"
+}
+
 func createBaseImageVolumes(
 	ctx *pulumi.Context,
 	cluster *config.ResolvedCluster,
@@ -78,7 +86,10 @@ func createBaseImageVolumes(
 			continue
 		}
 
-		if _, exists := imageVolumes[node.Image]; exists {
+		pool := nodePool(node)
+		mapKey := node.Image + "@" + pool
+
+		if _, exists := imageVolumes[mapKey]; exists {
 			continue
 		}
 
@@ -94,7 +105,7 @@ func createBaseImageVolumes(
 			Name:   pulumi.String(fmt.Sprintf("%s-%s.qcow2", cluster.Project, key)),
 			Source: pulumi.String(localSource),
 			Format: pulumi.String("qcow2"),
-			Pool:   pulumi.String("default"),
+			Pool:   pulumi.String(pool),
 		}
 
 		vol, err := libvirt.NewVolume(ctx, key, volArgs)
@@ -102,7 +113,7 @@ func createBaseImageVolumes(
 			return nil, fmt.Errorf("declaring base image volume %s: %w", key, err)
 		}
 
-		imageVolumes[node.Image] = vol
+		imageVolumes[mapKey] = vol
 	}
 
 	return imageVolumes, nil
@@ -161,16 +172,18 @@ func createRootVolume(
 	safeName string,
 	baseImageVolumes map[string]*libvirt.Volume,
 ) (*libvirt.Volume, error) {
-	baseVol, ok := baseImageVolumes[node.Image]
+	pool := nodePool(node)
+
+	baseVol, ok := baseImageVolumes[node.Image+"@"+pool]
 	if !ok {
-		return nil, fmt.Errorf("missing base image volume for node %s (image %s)", node.Name, node.Image)
+		return nil, fmt.Errorf("missing base image volume for node %s (image %s, pool %s)", node.Name, node.Image, pool)
 	}
 
 	rootArgs := &libvirt.VolumeArgs{
 		Name:         pulumi.String(fmt.Sprintf("%s-%s-root.qcow2", cluster.Project, node.Name)),
 		BaseVolumeId: baseVol.ID(),
 		Format:       pulumi.String("qcow2"),
-		Pool:         pulumi.String("default"),
+		Pool:         pulumi.String(pool),
 	}
 
 	if node.RootDiskSize != "" {
@@ -231,7 +244,7 @@ func createCloudInitDisk(
 		Name:     pulumi.String(fmt.Sprintf("%s-%s-ci.iso", cluster.Project, node.Name)),
 		UserData: pulumi.String(userData),
 		MetaData: pulumi.String(metaData),
-		Pool:     pulumi.String("default"),
+		Pool:     pulumi.String(nodePool(node)),
 	}
 
 	ci, err := libvirt.NewCloudInitDisk(ctx, "ci_"+safeName, ciArgs)

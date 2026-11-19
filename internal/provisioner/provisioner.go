@@ -17,6 +17,7 @@ import (
 
 var (
 	execAnsibleCommand           = exec.CommandContext
+	execLocalCommand             = exec.CommandContext
 	execSSHCommand               = exec.CommandContext
 	defaultStdout      io.Writer = os.Stdout
 	defaultStderr      io.Writer = os.Stderr
@@ -235,7 +236,12 @@ func RunAnsibleProvisioner(
 		inventoryPath = filepath.Join(projectDir, inventoryPath)
 	}
 
-	fmt.Println(FormatStep(nodeName, "Running ansible provisioner: "+prov.Playbook))
+	displayTarget := nodeName
+	if displayTarget == "" {
+		displayTarget = "cluster"
+	}
+
+	fmt.Println(FormatStep(displayTarget, "Running ansible provisioner: "+prov.Playbook))
 
 	args := []string{
 		"-i", inventoryPath,
@@ -255,8 +261,8 @@ func RunAnsibleProvisioner(
 	cmd := execAnsibleCommand(ctx, "ansible-playbook", args...)
 	cmd.Dir = projectDir
 
-	stdoutWriter := NewNodeLineWriter(defaultStdout, nodeName, false)
-	stderrWriter := NewNodeLineWriter(defaultStderr, nodeName, true)
+	stdoutWriter := NewNodeLineWriter(defaultStdout, displayTarget, false)
+	stderrWriter := NewNodeLineWriter(defaultStderr, displayTarget, true)
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
@@ -284,9 +290,131 @@ func runSingleProvisioner(
 		return RunShellProvisioner(ctx, sshConfigFile, nodeName, prov, projectDir)
 	case "ansible":
 		return RunAnsibleProvisioner(ctx, sshConfigFile, nodeName, prov, projectDir)
+	case "local":
+		return RunLocalProvisioner(ctx, sshConfigFile, nodeName, prov, projectDir)
 	default:
 		return fmt.Errorf("unsupported provisioner type: %s", prov.Type)
 	}
+}
+
+// RunLocalProvisioner executes a shell script or inline command on the host machine.
+func RunLocalProvisioner(
+	ctx context.Context,
+	sshConfigFile, nodeName string,
+	prov config.ProvisionConfig,
+	projectDir string,
+) error {
+	scriptContent, label, err := loadLocalScript(prov, projectDir)
+	if err != nil {
+		return err
+	}
+
+	if scriptContent == "" {
+		return nil
+	}
+
+	workDir, err := resolveLocalWorkDir(prov.Dir, projectDir)
+	if err != nil {
+		return err
+	}
+
+	displayTarget := nodeName
+	if displayTarget == "" {
+		displayTarget = "local"
+	}
+
+	fmt.Println(FormatStep(displayTarget, "Running local provisioner: "+label))
+
+	cmd := execLocalCommand(ctx, "bash", "-s")
+	cmd.Stdin = strings.NewReader(scriptContent)
+	cmd.Dir = workDir
+	cmd.Env = buildLocalEnv(prov.Env, projectDir, sshConfigFile, nodeName)
+
+	stdoutWriter := NewNodeLineWriter(defaultStdout, displayTarget, false)
+	stderrWriter := NewNodeLineWriter(defaultStderr, displayTarget, true)
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = stderrWriter
+
+	runErr := cmd.Run()
+	_ = stdoutWriter.Flush()
+	_ = stderrWriter.Flush()
+
+	if runErr != nil {
+		return fmt.Errorf("local provisioner failed: %w", runErr)
+	}
+
+	return nil
+}
+
+func loadLocalScript(prov config.ProvisionConfig, projectDir string) (content, label string, err error) {
+	switch {
+	case prov.Script != "":
+		scriptPath := prov.Script
+		if !filepath.IsAbs(scriptPath) && projectDir != "" {
+			scriptPath = filepath.Join(projectDir, scriptPath)
+		}
+
+		data, readErr := os.ReadFile(scriptPath)
+		if readErr != nil {
+			return "", "", fmt.Errorf("reading local script %s: %w", scriptPath, readErr)
+		}
+
+		return string(data), prov.Script, nil
+	case prov.Inline != "":
+		return prov.Inline, "inline command", nil
+	default:
+		return "", "", errors.New("local provisioner requires 'inline' or 'script' parameter")
+	}
+}
+
+func resolveLocalWorkDir(dir, projectDir string) (string, error) {
+	workDir := projectDir
+	if dir != "" {
+		workDir = dir
+		if !filepath.IsAbs(dir) && projectDir != "" {
+			workDir = filepath.Join(projectDir, dir)
+		}
+	}
+
+	if workDir == "" {
+		return "", nil
+	}
+
+	info, err := os.Stat(workDir)
+	if err != nil {
+		return "", fmt.Errorf("local provisioner dir %s: %w", workDir, err)
+	}
+
+	if !info.IsDir() {
+		return "", fmt.Errorf("local provisioner dir %s is not a directory", workDir)
+	}
+
+	return workDir, nil
+}
+
+func buildLocalEnv(extra map[string]string, projectDir, sshConfigFile, nodeName string) []string {
+	env := os.Environ()
+
+	if projectDir != "" {
+		env = append(env,
+			"ERRANT_PROJECT_DIR="+projectDir,
+			"ERRANT_INVENTORY="+filepath.Join(projectDir, ".errant", "inventory.ini"),
+		)
+	}
+
+	if sshConfigFile != "" {
+		env = append(env, "ERRANT_SSH_CONFIG="+sshConfigFile)
+	}
+
+	if nodeName != "" {
+		env = append(env, "ERRANT_NODE="+nodeName)
+	}
+
+	for k, v := range extra {
+		env = append(env, k+"="+v)
+	}
+
+	return env
 }
 
 // ProvisionCluster runs provisioners across all nodes or a targeted node.
@@ -353,8 +481,18 @@ func ProvisionStep(
 		if err := WaitForSSH(ctx, sshConfigFile, node.Name, 90*time.Second); err != nil {
 			return err
 		}
+	}
 
-		for _, p := range step.Provision {
+	for _, p := range step.Provision {
+		if isClusterWideStepProvisioner(p) {
+			if err := runSingleProvisioner(ctx, sshConfigFile, "", p, cluster.ProjectDir); err != nil {
+				return fmt.Errorf("step %d (%s) failed: %w", step.Index, step.Name, err)
+			}
+
+			continue
+		}
+
+		for _, node := range targets {
 			if err := runSingleProvisioner(ctx, sshConfigFile, node.Name, p, cluster.ProjectDir); err != nil {
 				return fmt.Errorf("step %d (%s) failed on %s: %w", step.Index, step.Name, node.Name, err)
 			}
@@ -362,4 +500,8 @@ func ProvisionStep(
 	}
 
 	return nil
+}
+
+func isClusterWideStepProvisioner(p config.ProvisionConfig) bool {
+	return (p.Type == "ansible" && p.Scope == "cluster") || (p.Type == "local" && p.Scope != "node")
 }

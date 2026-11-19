@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 type clusterMocks struct {
 	mu        sync.Mutex
 	resources []string
+	pools     map[string]string
 }
 
 func (*clusterMocks) Call(_ pulumi.MockCallArgs) (resource.PropertyMap, error) {
@@ -35,6 +36,14 @@ func (m *clusterMocks) NewResource(args pulumi.MockResourceArgs) (string, resour
 	defer m.mu.Unlock()
 
 	m.resources = append(m.resources, args.TypeToken+":"+args.Name)
+
+	if m.pools == nil {
+		m.pools = make(map[string]string)
+	}
+
+	if poolVal, ok := args.Inputs["pool"]; ok && poolVal.IsString() {
+		m.pools[args.Name] = poolVal.StringValue()
+	}
 
 	outputs := args.Inputs.Copy()
 
@@ -123,6 +132,31 @@ func TestNewClusterProgram(t *testing.T) {
 
 		if !found {
 			t.Errorf("expected resource of type %s in mock resources, got: %v", expected, mocks.resources)
+		}
+	}
+}
+
+func TestClusterProgramCustomStoragePool(t *testing.T) {
+	cluster := newTestCluster()
+	cluster.Nodes[0].StoragePool = "vmstore"
+	cluster.Nodes[0].Disks[0].Pool = "vmstore"
+	cluster.Nodes[1].StoragePool = "vmstore"
+
+	mocks := &clusterMocks{}
+
+	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
+		return NewClusterProgram(cluster)(ctx)
+	}, pulumi.WithMocks("test-project", "test-stack", mocks))
+	if err != nil {
+		t.Fatalf("program execution failed: %v", err)
+	}
+
+	mocks.mu.Lock()
+	defer mocks.mu.Unlock()
+
+	for _, resName := range []string{"base_image_1", "root_cp_1", "ci_cp_1", "root_worker_1", "ci_worker_1"} {
+		if got := mocks.pools[resName]; got != "vmstore" {
+			t.Errorf("expected resource %s in pool 'vmstore', got %q", resName, got)
 		}
 	}
 }

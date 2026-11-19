@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // Config represents the raw root Errantfile.yaml structure.
 type Config struct {
 	Version         string                      `yaml:"version" json:"version"`
@@ -28,16 +30,18 @@ type ImageBuildConfig struct {
 
 // DefaultsConfig contains global fallback settings.
 type DefaultsConfig struct {
-	Image         string               `yaml:"image,omitempty" json:"image,omitempty"`
-	ImageAlias    string               `yaml:"image_alias,omitempty" json:"image_alias,omitempty"`
-	Box           string               `yaml:"box,omitempty" json:"box,omitempty"`
-	Driver        string               `yaml:"driver,omitempty" json:"driver,omitempty"`
-	MemoryMB      int                  `yaml:"memory_mb,omitempty" json:"memory_mb,omitempty"`
-	CPUs          int                  `yaml:"cpus,omitempty" json:"cpus,omitempty"`
-	RootDiskSize  string               `yaml:"root_disk_size,omitempty" json:"root_disk_size,omitempty"`
-	SSH           SSHConfig            `yaml:"ssh,omitempty" json:"ssh,omitempty"`
-	SyncedFolders []SyncedFolderConfig `yaml:"synced_folders,omitempty" json:"synced_folders,omitempty"`
-	SnapshotMode  string               `yaml:"snapshot_mode,omitempty" json:"snapshot_mode,omitempty"`
+	Image           string               `yaml:"image,omitempty" json:"image,omitempty"`
+	ImageAlias      string               `yaml:"image_alias,omitempty" json:"image_alias,omitempty"`
+	Box             string               `yaml:"box,omitempty" json:"box,omitempty"`
+	Driver          string               `yaml:"driver,omitempty" json:"driver,omitempty"`
+	MemoryMB        int                  `yaml:"memory_mb,omitempty" json:"memory_mb,omitempty"`
+	CPUs            int                  `yaml:"cpus,omitempty" json:"cpus,omitempty"`
+	RootDiskSize    string               `yaml:"root_disk_size,omitempty" json:"root_disk_size,omitempty"`
+	SSH             SSHConfig            `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	SyncedFolders   []SyncedFolderConfig `yaml:"synced_folders,omitempty" json:"synced_folders,omitempty"`
+	SnapshotMode    string               `yaml:"snapshot_mode,omitempty" json:"snapshot_mode,omitempty"`
+	ShutdownTimeout string               `yaml:"shutdown_timeout,omitempty" json:"shutdown_timeout,omitempty"`
+	StoragePool     string               `yaml:"storage_pool,omitempty" json:"storage_pool,omitempty"`
 }
 
 // SSHConfig holds SSH connection parameters.
@@ -65,6 +69,7 @@ type ProfileConfig struct {
 	MemoryMB      int                  `yaml:"memory_mb,omitempty" json:"memory_mb,omitempty"`
 	CPUs          int                  `yaml:"cpus,omitempty" json:"cpus,omitempty"`
 	RootDiskSize  string               `yaml:"root_disk_size,omitempty" json:"root_disk_size,omitempty"`
+	StoragePool   string               `yaml:"storage_pool,omitempty" json:"storage_pool,omitempty"`
 	Disks         []DiskConfig         `yaml:"disks,omitempty" json:"disks,omitempty"`
 	SyncedFolders []SyncedFolderConfig `yaml:"synced_folders,omitempty" json:"synced_folders,omitempty"`
 	Provision     []ProvisionConfig    `yaml:"provision,omitempty" json:"provision,omitempty"`
@@ -92,6 +97,7 @@ type ProvisionConfig struct {
 	Type      string            `yaml:"type" json:"type"`
 	Inline    string            `yaml:"inline,omitempty" json:"inline,omitempty"`
 	Script    string            `yaml:"script,omitempty" json:"script,omitempty"`
+	Dir       string            `yaml:"dir,omitempty" json:"dir,omitempty"`
 	Source    string            `yaml:"source,omitempty" json:"source,omitempty"`
 	Target    string            `yaml:"target,omitempty" json:"target,omitempty"`
 	Mode      string            `yaml:"mode,omitempty" json:"mode,omitempty"`
@@ -100,6 +106,7 @@ type ProvisionConfig struct {
 	Inventory string            `yaml:"inventory,omitempty" json:"inventory,omitempty"`
 	ExtraVars map[string]string `yaml:"extra_vars,omitempty" json:"extra_vars,omitempty"`
 	When      string            `yaml:"when,omitempty" json:"when,omitempty"`
+	Scope     string            `yaml:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // NodeConfig represents a node declaration inside a topology.
@@ -115,6 +122,7 @@ type NodeConfig struct {
 	MemoryMB      int                  `yaml:"memory_mb,omitempty" json:"memory_mb,omitempty"`
 	CPUs          int                  `yaml:"cpus,omitempty" json:"cpus,omitempty"`
 	RootDiskSize  string               `yaml:"root_disk_size,omitempty" json:"root_disk_size,omitempty"`
+	StoragePool   string               `yaml:"storage_pool,omitempty" json:"storage_pool,omitempty"`
 	Disks         []DiskConfig         `yaml:"disks,omitempty" json:"disks,omitempty"`
 	SyncedFolders []SyncedFolderConfig `yaml:"synced_folders,omitempty" json:"synced_folders,omitempty"`
 	Provision     []ProvisionConfig    `yaml:"provision,omitempty" json:"provision,omitempty"`
@@ -152,6 +160,7 @@ type ResolvedCluster struct {
 	ProjectDir      string
 	Topology        string
 	SnapshotMode    string
+	ShutdownTimeout time.Duration
 	Network         ResolvedNetwork
 	Images          map[string]ImageBuildConfig
 	Nodes           []ResolvedNode
@@ -177,6 +186,7 @@ type ResolvedNode struct {
 	MemoryMB      int
 	CPUs          int
 	RootDiskSize  string
+	StoragePool   string
 	SSH           SSHConfig
 	Disks         []DiskConfig
 	SyncedFolders []SyncedFolderConfig

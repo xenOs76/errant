@@ -6,6 +6,9 @@ defaults:
   image: "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img"
   image_alias: "ubuntu-26.04"
   driver: libvirt
+  storage_pool: vmstore
+  # Graceful ACPI shutdown timeout before disk snapshots (default: 180s; k8s/NFS nodes may need longer)
+  shutdown_timeout: "5m"
   memory_mb: 2048
   cpus: 2
   root_disk_size: "25G"
@@ -42,6 +45,8 @@ profiles:
         target: /home/vagrant/cni-install-calico.sh
         mode: "0755"
       - type: shell
+        inline: chmod +x /home/vagrant/*.sh && chown vagrant:vagrant /home/vagrant/*.sh
+      - type: shell
         script: scripts/common.sh
         env:
           K8S_VERSION: "1.36.0-1.1"
@@ -50,6 +55,8 @@ profiles:
         env:
           K9S_VERSION: "v0.51.0"
           ETCD_VERSION: "v3.5.16"
+          KREW_VERSION: "v0.5.0"
+          CYCLONUS_VERSION: "v0.2.1"
 
   worker:
     role: worker
@@ -73,6 +80,7 @@ topologies:
         profile: worker
         count: 2
         ip_start: 192.168.56.21
+        memory_mb: 4096
 
   ha:
     description: "High Availability cluster: 3 Control Planes + 1 Worker"
@@ -91,10 +99,67 @@ topologies:
       - name: kube-worker-1
         profile: worker
         ip: 192.168.56.21
+    steps:
+      - name: preprod-ha-up
+        description: Configure HA control plane (make preprod-ha-up)
+        provision:
+          - type: local
+            dir: ../../../os76-ansible/k8s-homelab
+            inline: |
+              ./scripts/run-playbook.sh -e preprod-ha -p ha_control_plane.yml \
+                --ssh-common-args="-F ${ERRANT_SSH_CONFIG}" \
+                --extra-vars "ansible_ssh_private_key_file="
+      - name: preprod-deploy
+        description: Deploy full HA Kubernetes cluster (make preprod-ha-deploy)
+        provision:
+          - type: local
+            dir: ../../../os76-ansible/k8s-homelab
+            inline: |
+              ./scripts/run-playbook.sh -e preprod-ha -p site.yml \
+                --skip-tags kubeconfig \
+                --ssh-common-args="-F ${ERRANT_SSH_CONFIG}" \
+                --extra-vars "ansible_ssh_private_key_file="
 
 global_provision:
+  - type: shell
+    when: once
+    inline: |
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -y
+      apt-get upgrade -y
+      apt-get clean -y
   - type: shell
     when: always
     inline: |
       chsh -s /bin/bash vagrant || usermod -s /bin/bash vagrant
       swapoff -a
+
+steps:
+  - name: preprod-up
+    description: Configure NFS server (make preprod-up)
+    provision:
+      - type: local
+        dir: ../../../os76-ansible/k8s-homelab
+        inline: |
+          ./scripts/run-playbook.sh -e preprod -p nfs.yml \
+            --ssh-common-args="-F ${ERRANT_SSH_CONFIG}" \
+            --extra-vars "ansible_ssh_private_key_file="
+  - name: preprod-deploy
+    description: Deploy full Kubernetes cluster (make preprod-deploy)
+    provision:
+      - type: local
+        dir: ../../../os76-ansible/k8s-homelab
+        inline: |
+          ./scripts/run-playbook.sh -e preprod -p site.yml \
+            --skip-tags kubeconfig \
+            --ssh-common-args="-F ${ERRANT_SSH_CONFIG}" \
+            --extra-vars "ansible_ssh_private_key_file="
+  - name: preprod-cks-lab
+    description: Deploy CKS training lab scenarios (make preprod-cks-lab)
+    provision:
+      - type: local
+        dir: ../../../os76-ansible/k8s-homelab
+        inline: |
+          ./scripts/run-playbook.sh -e preprod -p cks_lab.yml \
+            --ssh-common-args="-F ${ERRANT_SSH_CONFIG}" \
+            --extra-vars "ansible_ssh_private_key_file="

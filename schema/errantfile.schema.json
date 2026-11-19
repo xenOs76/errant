@@ -72,6 +72,16 @@
           "enum": ["disk", "live"],
           "default": "disk",
           "description": "Snapshot mode for lifecycle steps: 'disk' (shutdown/offline consistent) or 'live' (online)"
+        },
+        "shutdown_timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$",
+          "default": "180s",
+          "description": "Graceful VM shutdown timeout before disk snapshots (e.g. '60s', '180s', '3m')"
+        },
+        "storage_pool": {
+          "type": "string",
+          "description": "Libvirt storage pool name for node volumes (e.g. 'default', 'vmstore', or 'auto')"
         }
       }
     },
@@ -230,7 +240,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["shell", "file", "ansible"]
+          "enum": ["shell", "file", "ansible", "local"]
         },
         "inline": {
           "type": "string",
@@ -239,6 +249,10 @@
         "script": {
           "type": "string",
           "description": "Host path to shell script file"
+        },
+        "dir": {
+          "type": "string",
+          "description": "Working directory on the host for 'local' provisioner (relative to Errantfile.yaml or absolute)"
         },
         "source": {
           "type": "string",
@@ -280,6 +294,12 @@
           "enum": ["once", "always"],
           "default": "once",
           "description": "Whether to run once on first creation or always on errant up"
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["node", "cluster"],
+          "default": "node",
+          "description": "Execution scope for ansible provisioners ('node' runs per-node with --limit; 'cluster' runs once across the full inventory)"
         }
       }
     },
@@ -311,6 +331,10 @@
         "root_disk_size": {
           "type": "string",
           "pattern": "^[0-9]+[GMKTP]?$"
+        },
+        "storage_pool": {
+          "type": "string",
+          "description": "Libvirt storage pool override for this profile"
         },
         "disks": {
           "type": "array",
@@ -387,6 +411,10 @@
           "type": "string",
           "pattern": "^[0-9]+[GMKTP]?$",
           "description": "Local override for profile root_disk_size"
+        },
+        "storage_pool": {
+          "type": "string",
+          "description": "Libvirt storage pool override for this node"
         },
         "disks": {
           "type": "array",

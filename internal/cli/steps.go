@@ -20,22 +20,22 @@ import (
 
 var validCustomStepName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
-func newStepCmd() *cobra.Command {
+func newStepsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "step",
+		Use:   "steps",
 		Short: "Manage declarative lifecycle steps and VM snapshots",
 	}
 
-	cmd.AddCommand(newStepListCmd())
-	cmd.AddCommand(newStepApplyCmd())
-	cmd.AddCommand(newStepSaveCmd())
-	cmd.AddCommand(newStepRevertCmd())
-	cmd.AddCommand(newStepDeleteCmd())
+	cmd.AddCommand(newStepsListCmd())
+	cmd.AddCommand(newStepsApplyCmd())
+	cmd.AddCommand(newStepsSaveCmd())
+	cmd.AddCommand(newStepsRevertCmd())
+	cmd.AddCommand(newStepsDeleteCmd())
 
 	return cmd
 }
 
-func newStepListCmd() *cobra.Command {
+func newStepsListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
@@ -58,7 +58,7 @@ func newStepListCmd() *cobra.Command {
 	}
 }
 
-func newStepApplyCmd() *cobra.Command {
+func newStepsApplyCmd() *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
@@ -107,7 +107,7 @@ func newStepApplyCmd() *cobra.Command {
 	return cmd
 }
 
-func newStepSaveCmd() *cobra.Command {
+func newStepsSaveCmd() *cobra.Command {
 	var (
 		description string
 		force       bool
@@ -141,7 +141,7 @@ func newStepSaveCmd() *cobra.Command {
 	return cmd
 }
 
-func newStepRevertCmd() *cobra.Command {
+func newStepsRevertCmd() *cobra.Command {
 	var prune bool
 
 	cmd := &cobra.Command{
@@ -188,7 +188,7 @@ func newStepRevertCmd() *cobra.Command {
 	return cmd
 }
 
-func newStepDeleteCmd() *cobra.Command {
+func newStepsDeleteCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "delete <step-index-or-name>",
 		Short: "Delete the snapshot associated with a lifecycle step",
@@ -593,6 +593,10 @@ func createClusterSnapshots(
 	snapName string,
 	desc string,
 ) ([]string, error) {
+	if lm, ok := mgr.(*snapshot.LibvirtManager); ok && cluster.ShutdownTimeout > 0 {
+		lm.ShutdownTimeout = cluster.ShutdownTimeout
+	}
+
 	nodeNames := make([]string, 0, len(cluster.Nodes))
 
 	for _, node := range cluster.Nodes {

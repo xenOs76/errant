@@ -1004,21 +1004,21 @@ func TestStepUpApplyAndList(t *testing.T) {
 		t.Fatalf("expected 2 snapshots created (step 0 & 1), got %v", mockSnap.created)
 	}
 
-	out, err := executeCommand("step", "list", "--config", cfgPath)
+	out, err := executeCommand("steps", "list", "--config", cfgPath)
 	if err != nil {
-		t.Fatalf("step list failed: %v", err)
+		t.Fatalf("steps list failed: %v", err)
 	}
 
 	if !strings.Contains(out, "webserver") || !strings.Contains(out, "saved") || !strings.Contains(out, "pending") {
-		t.Errorf("unexpected step list output:\n%s", out)
+		t.Errorf("unexpected steps list output:\n%s", out)
 	}
 
-	if _, err := executeCommand("step", "apply", "--config", cfgPath); err != nil {
-		t.Fatalf("step apply failed: %v", err)
+	if _, err := executeCommand("steps", "apply", "--config", cfgPath); err != nil {
+		t.Fatalf("steps apply failed: %v", err)
 	}
 
 	if len(*provSteps) != 2 || (*provSteps)[1] != "app" {
-		t.Fatalf("expected app provisioned on step apply, got %v", *provSteps)
+		t.Fatalf("expected app provisioned on steps apply, got %v", *provSteps)
 	}
 }
 
@@ -1029,8 +1029,8 @@ func TestStepRevertAndDestroyCleanup(t *testing.T) {
 		t.Fatalf("up failed: %v", err)
 	}
 
-	if _, err := executeCommand("step", "revert", "1", "--prune", "--config", cfgPath); err != nil {
-		t.Fatalf("step revert failed: %v", err)
+	if _, err := executeCommand("steps", "revert", "1", "--prune", "--config", cfgPath); err != nil {
+		t.Fatalf("steps revert failed: %v", err)
 	}
 
 	if len(mockSnap.reverted) != 1 || mockSnap.reverted[0] != "step-cli-test-debian-vm:errant-step-1" {
@@ -1097,33 +1097,33 @@ func TestAdhocStepSaveRevertDeleteWithoutConfigSteps(t *testing.T) {
 
 	t.Cleanup(func() { runnerFactory = origRunnerFactory })
 
-	if _, err := executeCommand("step", "save", "my-exp", "-m", "debug", "--config", cfgPath); err != nil {
-		t.Fatalf("step save failed: %v", err)
+	if _, err := executeCommand("steps", "save", "my-exp", "-m", "debug", "--config", cfgPath); err != nil {
+		t.Fatalf("steps save failed: %v", err)
 	}
 
 	if len(mockSnap.created) != 1 || mockSnap.created[0] != "cli-test-test-cp:errant-user-my-exp" {
 		t.Fatalf("unexpected snapshot created: %v", mockSnap.created)
 	}
 
-	out, err := executeCommand("step", "list", "--config", cfgPath)
+	out, err := executeCommand("steps", "list", "--config", cfgPath)
 	if err != nil {
-		t.Fatalf("step list failed: %v", err)
+		t.Fatalf("steps list failed: %v", err)
 	}
 
 	if !strings.Contains(out, "user:my-exp") || !strings.Contains(out, "debug") {
-		t.Errorf("expected user:my-exp in step list, got:\n%s", out)
+		t.Errorf("expected user:my-exp in steps list, got:\n%s", out)
 	}
 
-	if _, err := executeCommand("step", "revert", "my-exp", "--config", cfgPath); err != nil {
-		t.Fatalf("step revert unprefixed custom failed: %v", err)
+	if _, err := executeCommand("steps", "revert", "my-exp", "--config", cfgPath); err != nil {
+		t.Fatalf("steps revert unprefixed custom failed: %v", err)
 	}
 
 	if len(mockSnap.reverted) != 1 || mockSnap.reverted[0] != "cli-test-test-cp:errant-user-my-exp" {
 		t.Errorf("unexpected revert: %v", mockSnap.reverted)
 	}
 
-	if _, err := executeCommand("step", "delete", "user:my-exp", "--config", cfgPath); err != nil {
-		t.Fatalf("step delete failed: %v", err)
+	if _, err := executeCommand("steps", "delete", "user:my-exp", "--config", cfgPath); err != nil {
+		t.Fatalf("steps delete failed: %v", err)
 	}
 
 	if len(mockSnap.deleted) != 1 || mockSnap.deleted[0] != "cli-test-test-cp:errant-user-my-exp" {
@@ -1139,17 +1139,17 @@ func TestAdhocStepDisambiguationWithDeclarativeStep(t *testing.T) {
 	}
 
 	// Save an ad-hoc step whose name matches a declarative step ("app") in Errantfile.yaml.
-	if _, err := executeCommand("step", "save", "app", "-m", "manual app", "--config", cfgPath); err != nil {
-		t.Fatalf("step save 'app' failed: %v", err)
+	if _, err := executeCommand("steps", "save", "app", "-m", "manual app", "--config", cfgPath); err != nil {
+		t.Fatalf("steps save 'app' failed: %v", err)
 	}
 
 	// Applying declarative step 2 while on user:app should require revert or --force.
-	if _, err := executeCommand("step", "apply", "2", "--config", cfgPath); err == nil {
+	if _, err := executeCommand("steps", "apply", "2", "--config", cfgPath); err == nil {
 		t.Fatal("expected error applying declarative step while on user:app without --force")
 	}
 
 	// Reverting with explicit user:app targets errant-user-app.
-	if _, err := executeCommand("step", "revert", "user:app", "--config", cfgPath); err != nil {
+	if _, err := executeCommand("steps", "revert", "user:app", "--config", cfgPath); err != nil {
 		t.Fatalf("revert user:app failed: %v", err)
 	}
 
@@ -1158,7 +1158,7 @@ func TestAdhocStepDisambiguationWithDeclarativeStep(t *testing.T) {
 	}
 
 	// Reverting with unprefixed "app" targets declarative step 2 (errant-step-2) and prints ambiguity note.
-	out, err := executeCommand("step", "revert", "app", "--config", cfgPath)
+	out, err := executeCommand("steps", "revert", "app", "--config", cfgPath)
 	if err != nil {
 		t.Fatalf("revert app failed: %v", err)
 	}
